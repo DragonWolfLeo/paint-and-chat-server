@@ -1,0 +1,88 @@
+<html>
+
+<head>
+  <title>Express</title>
+  <link rel="stylesheet" href="/stylesheets/style.css">
+</head>
+
+<body>
+  <h1>paint-webapp-server</h1>
+  <p>This is the test index page of the server. The client is in the paintwebappclient folder of the project.</p>
+
+  <form id="login" action="">
+    <label for="room">Room</label>
+    <input id="room" autocomplete="off" value="dargon_drawing_room" /><br>
+
+    <label for="userPass">Password</label>
+    <input id="userPass" autocomplete="off" value="users_pass" /><br>
+
+    <label for="userLogin">Login</label>
+    <input id="userLogin" autocomplete="off" /><button>Login</button>
+  </form>
+
+  <form id="chat" action="" style="display: none">
+    <input id="m" autocomplete="off" /><button>Send</button>
+  </form>
+  <ul id="messages"></ul>
+
+  <script src="./socket.io/socket.io.js"></script>
+  <script src="https://code.jquery.com/jquery-1.11.1.js"></script>
+  <script>
+    var connectionActive = false;
+
+    // chat functions
+    function addChatMessage(msg) {
+      $("#messages").append($("<li>").text(msg));
+    }
+    function showChatBox() {
+      $("#login").hide();
+      $("#chat").show();
+      $("#messages").empty();
+    }
+    // Test WebSocket Client API
+    $(function () {
+      var socket = io();
+      /* Send functions */
+      // Attempt to authenticate with the server
+      $("#login").submit(function(evt) {
+        socket.emit("auth", JSON.stringify({
+          login: $("#userLogin").val(),
+          pass: $("#userPass").val(),
+          room: $("#room").val(),
+        }));
+        evt.preventDefault();
+        return false;
+      });
+      // Send message to server
+      $("#chat").submit(function(evt) {
+        socket.emit("sendMessage", $("#m").val());
+        $("#m").val("");
+        evt.preventDefault();
+        return false;
+      });
+
+      /* Receive functions */
+      // Authorization
+      // authResponseJsonString: AuthResponseJsonString
+      socket.on("auth", function(authResponseJsonString) {
+        var authResponse = JSON.parse(authResponseJsonString);
+        if(authResponse.error)
+          addChatMessage("Failed to authenticate: " + authResponse.error);
+        else {
+          addChatMessage("Authentication success. Token is: " + authResponse.token);
+          showChatBox();
+          connectionActive = true;
+        }
+      });
+
+      // Receive message from server
+      // message: string
+      socket.on("sendMessage", function(message) {
+        addChatMessage(message);
+        window.scrollTo(0, document.body.scrollHeight);
+      });
+    });
+  </script>
+</body>
+
+</html>
