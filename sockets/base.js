@@ -112,9 +112,21 @@ function broadcastMessageToRoom(io, roomId, message, userLoginToExclude) {
 	connections.forEach(conn => {
 		if(userLoginToExclude && conn.userLogin == userLoginToExclude)
 			return; // Don't send message back to the user who sent it when userLoginToExclude is specified
-		if(io.sockets.connected[conn.socket] == null)
+		if(!io.sockets.connected[conn.socket])
 			return; // user must have disconnected or is not yet authenticated
 		io.sockets.connected[conn.socket].emit("sendMessage", message);
+	});
+}
+
+function broadcastCanvasToRoom(io, roomId, data, userLoginToExclude) {
+	console.log(`Broadcasting canvas to room ${roomId}`);
+	const connections = getAllSocketsOfRoomId(roomId);
+	connections.forEach(conn => {
+		// if(userLoginToExclude && conn.userLogin === userLoginToExclude)
+		// 	return; // Don't send canvas back to the user who sent it when userLoginToExclude is specified
+		if(!io.sockets.connected[conn.socket])
+			return; // user must have disconnected or is not yet authenticated
+		io.sockets.connected[conn.socket].emit("sendCanvas", data);
 	});
 }
 
@@ -144,14 +156,14 @@ module.exports = function handleSocketUser(io) {
 			// input string: message
 			client.on("sendMessage", function(message){
 				var userContext = identifyUserContextBySocket(client.id);
-				if(userContext == null) {
+				if(userContext === null) {
 					io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before sending messages.");
 					return;
 				}
 					
-				var connections = getAllSocketsOfRoomId(userContext.roomId);
-				console.log("Received request to send message by user "+userContext.userLogin+" in roomId "+userContext.room);
-				console.log("connections are: ", connections);
+				// var connections = getAllSocketsOfRoomId(userContext.roomId);
+				// console.log("Received request to send message by user "+userContext.userLogin+" in roomId "+userContext.room);
+				// console.log("connections are: ", connections);
 				
 				var now = new Date();
 				message = now.toLocaleDateString()+" "+now.toLocaleTimeString()+" "+userContext.user.name+": "+message;
@@ -163,6 +175,17 @@ module.exports = function handleSocketUser(io) {
 			// input string: authToken
 			client.on("sync", function(msg){
 				console.log("Request for sync received");
+			});
+
+			// User sends a canvas update
+			client.on("sendCanvas", function(data){
+				const userContext = identifyUserContextBySocket(client.id);
+				if(userContext === null) {
+					io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before sending canvas.");
+					return;
+				}
+				console.log("Canvas data received");
+				broadcastCanvasToRoom(io, userContext.room, data);
 			});
 
 		});
