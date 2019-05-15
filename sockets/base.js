@@ -13,6 +13,10 @@ let mockJsonDatabase = {
 			name: "Luka Loginska",
 			pass: "users_pass",
 		},//User: object
+		"vada": {
+			name: "VAdaPEGA",
+			pass: "users_pass",
+		},//User: object
 	},//Array<User>: object[string:userLogin],
 
 	rooms: {
