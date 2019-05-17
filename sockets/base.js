@@ -1,3 +1,5 @@
+const Jimp = require("jimp");
+
 // Mock database structure
 let mockJsonDatabase = {
 	users: {
@@ -21,13 +23,14 @@ let mockJsonDatabase = {
 
 	rooms: {
 		"dargon_drawing_room": {
-			canvas: { // array[int:x][int:y] e.g. canvas[5][10] is the pixel at 5,10
-				"5": {
-					"10": {
-						rgbaHexColor: "#ff0000ff",
-					},//Pixel: object
-				},//Column: object[int]:y
-			},//Canvas: object[int:x][int:y]
+			// canvas: { // array[int:x][int:y] e.g. canvas[5][10] is the pixel at 5,10
+			// 	"5": {
+			// 		"10": {
+			// 			rgbaHexColor: "#ff0000ff",
+			// 		},//Pixel: object
+			// 	},//Column: object[int]:y
+			// },//Canvas: object[int:x][int:y]
+			canvas: null, // Jimp instance
 		},//Room
 	},//Array<Room>: object[string:roomId],
 
@@ -94,6 +97,10 @@ function getUserByLogin(userLogin) {
 	}
 }
 
+function getRoomById(roomId) {
+	return mockJsonDatabase.rooms[roomId];
+}
+
 function identifyUserContextBySocket(socket) {
 	for(var userLogin in active_connections) {
 		for(var roomId in active_connections[userLogin]) {
@@ -151,16 +158,25 @@ module.exports = function handleSocketUser(io) {
 				var authResponseJson = authenticate(authData.login, authData.pass, authData.room, client.id);
 				io.sockets.connected[client.id].emit("auth", JSON.stringify(authResponseJson));
 				if(!authResponseJson.error) {
-					var welcomeMessage = authResponseJson.user.name + " has joined the Room " + authData.room;
+					var welcomeMessage = `${authResponseJson.user.name} has joined the Room ${authData.room}`;
 					broadcastMessageToRoom(io, authData.room, welcomeMessage);
+					// Send current canvas to joined user
+					const room = getRoomById(authData.room);
+					if(room.canvas){
+						room.canvas.getBufferAsync(Jimp.MIME_PNG)
+						.then(buffer=>
+							io.sockets.connected[client.id].emit("sendCanvas", {blob: buffer})
+						)
+						.catch(console.error);
+					}
 				}
 			});
 
 			// User sends chat message
 			// input string: message
 			client.on("sendMessage", function(message){
-				var userContext = identifyUserContextBySocket(client.id);
-				if(userContext === null) {
+				const userContext = identifyUserContextBySocket(client.id);
+				if(!userContext) {
 					io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before sending messages.");
 					return;
 				}
@@ -184,12 +200,49 @@ module.exports = function handleSocketUser(io) {
 			// User sends a canvas update
 			client.on("sendCanvas", function(data){
 				const userContext = identifyUserContextBySocket(client.id);
-				if(userContext === null) {
-					io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before sending canvas.");
+				if(!userContext) {
+					io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before drawing.");
 					return;
 				}
-				console.log("Canvas data received");
-				broadcastCanvasToRoom(io, userContext.room, data);
+
+				// Check if data exists
+				if(!data.blob){ return console.log(`Invalid canvas data received from ${userContext.user.name}`);
+				}
+
+				// Read data
+				Jimp.read(data.blob)
+				.then(image => {
+					const room = getRoomById(userContext.room);
+					if(!room.canvas){
+						// Canvas doesn't exist. Initialize with a blank white canvas
+						const width = 400, height = 400;
+						room.canvas = new Jimp(width, height, 0xffffffff, (err, image) => {
+							if(err){
+								console.error(err);
+								return;
+							}
+							image.opaque();
+						});
+					}
+					if(room.canvas){
+						// Combine user drawing with main canvas
+						const x = 0, y = 0;
+						image.composite(room.canvas, x, y, {  
+							mode: Jimp.BLEND_DESTINATION_OVER,
+						})
+						// Convert to buffer
+						.getBufferAsync(Jimp.MIME_PNG)
+						// Broadcast new canvas
+						.then(buffer=>
+							broadcastCanvasToRoom(io, userContext.room, {blob: buffer})
+						)
+						.catch(console.error);
+						room.canvas = image;
+					}
+					
+				})
+				.catch(err=>console.log(`Unable to read canvas data received from ${userContext.user.name}`,err));
+				
 			});
 
 		});
