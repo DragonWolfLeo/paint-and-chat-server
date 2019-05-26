@@ -56,7 +56,7 @@ const active_connections = {
 
 const active_rooms = {
 	rooms: {
-	"dargon_drawing_room": {
+	"test_room": {
 		// canvas: { // array[int:x][int:y] e.g. canvas[5][10] is the pixel at 5,10
 		// 	"5": {
 		// 		"10": {
