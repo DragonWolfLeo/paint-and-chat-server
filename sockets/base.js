@@ -8,12 +8,41 @@ const MESSAGE_TYPES = Object.freeze({
 	USER_JOIN: "user_join",
 });
 
+// Classes
+class UserProfile {
+	constructor(name, color){
+		this.name = name;
+		this.color = color;
+	}
+}
+class UserSession {
+	constructor(socket, profile, room){
+		this.socket = socket;
+		this.room = room;
+		this.profile = profile;
+	};
+}
+class Room {
+	constructor(id){
+		this.id = id;
+		// Initialize with a blank white canvas
+		const width = 400, height = 400;
+		this.canvas = new Jimp(width, height, 0xffffffff, (err, image) => {
+			if(err){
+				console.error(err);
+				return;
+			}
+			image.opaque();
+		});
+	}
+}
+
 // Mock database structure
 const mockLoginDatabase = {
 	users: {
 		user: {
 			pass: "users_pass",
-		},
+		},//User: object
 		leo: {
 			pass: "users_pass",
 		},//User: object
@@ -28,45 +57,20 @@ const mockLoginDatabase = {
 
 // User profiles; Non-sensitive user data goes here
 const userProfiles = {
-	user: {
-		name: "User",
-		color: "#009900",
-	},
-	leo: {
-		name: "Dragon Wolf Leo",
-		color: "#FF6600",
-	},//User: object
-	luka: {
-		name: "Luka Loginska",
-		color: "#0051F3",
-	},//User: object
-	vada: {
-		name: "VAdaPEGA",
-		color: "#FF0000",
-	},//User: object
+	user: new UserProfile("User", "#009900"),
+	leo: new UserProfile("Dragon Wolf Leo", "#FF6600"),
+	luka: new UserProfile("Luka Loginska", "#0051F3"),
+	vada: new UserProfile("VAdaPEGA", "#FF0000"),
 }
 
-// const active_connections = {
-// 	"userLoginExample": {
-// 		"roomExample": {
-// 			"token": null, // string
-// 			"socket": null, // WebSocket
-// 		}
-// 	},
-// };
-// const active_connections = new LinkedList();
-
 const activeRooms = {
-	test_room: {
-		canvas: null, // Jimp instance
-	},//Room
+	test_room: new Room("test_room"),
 }
 
 const activeUsers = new LinkedList();
 
-function authenticate(userLogin, userPass, roomId, socket) {
+function authenticate(userLogin, userPass, room, socket) {
 	// Assert: That room exists
-	const room = activeRooms[roomId];
 	if(!room){
 		return {
 			token: null,
@@ -83,14 +87,10 @@ function authenticate(userLogin, userPass, roomId, socket) {
 			error: `Incorrect login/password for ${userLogin}`,
 		};
 	// Assign new token then return it
-	// if(!active_connections[userLogin]) active_connections[userLogin] = {};
 	const token = Math.random().toString(36).substring(7);
 
-	activeUsers.append({
-		socket,
-		userLogin,
-		room,
-	});
+	activeUsers.append(new UserSession(socket, userProfiles[userLogin], room));
+	
 
 	const userProfile = userProfiles[userLogin];
 	if(!userProfile){
@@ -104,108 +104,64 @@ function authenticate(userLogin, userPass, roomId, socket) {
 	};
 }
 
-function getAllSocketsOfRoomId(roomId) {
-	const sockets = [];
-	const room = activeRooms[roomId];
+function getAllSessionsOfRoom(room) {
+	const sessions = [];
 	let current = activeUsers.head;
 	while(current){
 		const userSession = current.value;
 		if(room === userSession.room){
-			const {userLogin, socket} = userSession;
-			sockets.push({
-				userLogin,
-				socket,
-			});
+			sessions.push(userSession);
 		}
 		current = current.next;
 	}
-	// for(var userLogin in active_connections) {
-	// 	for(var _roomId in active_connections[userLogin]) {
-	// 		if(_roomId != roomId)
-	// 			continue;
-	// 		if(active_connections[userLogin] == null || active_connections[userLogin][_roomId] == null || active_connections[userLogin][_roomId].socket == null)
-	// 			continue;
-	// 		sockets.push({
-	// 			userLogin: userLogin,
-	// 			socket: active_connections[userLogin][_roomId].socket,
-	// 		});
-	// 	}
-	// }
-	return sockets;
+	return sessions;
 }
 
-function getUserByLogin(userLogin) {
-	return userProfiles[userLogin];
-}
-
-function getRoomById(roomId) {
-	return activeRooms[roomId];
-}
-
-function identifyUserContextBySocket(socket) {
+function identifyUserSessionBySocket(socket) {
 	let current = activeUsers.head;
 	while(current){
 		const userSession = current.value;
 		if(socket === userSession.socket){
-			const {userLogin, room} = userSession;
-			return {
-				userLogin,
-				user: getUserByLogin(userLogin),
-				room,
-			};
+			return userSession;
 		}
 		current = current.next;
 	}
-	// for(var userLogin in active_connections) {
-	// 	for(var roomId in active_connections[userLogin]) {
-	// 		if(active_connections[userLogin][roomId] == null)
-	// 			continue;
-	// 		if(active_connections[userLogin][roomId].socket == socket)
-	// 			return {
-	// 				userLogin: userLogin,
-	// 				user: getUserByLogin(userLogin),
-	// 				room: roomId,
-	// 			};
-	// 	}
-	// }
 	return null;
 }
 
-function broadcastMessageToRoom(io, roomId, message, userLoginToExclude) {
+function broadcastMessageToRoom(io, room, message, userToExclude) {
 	// Log message
 	if(typeof(message) === "object"){
 		if(message.type){
 			switch(message.type){
 				case MESSAGE_TYPES.USER_MESSAGE:
 					const {user: {color, name}, message: str} = message;
-					console.log(`[${roomId}] ${chalk.hex(color).bold(`${name} (${userLoginToExclude})`)}: ${str}`);
+					console.log(`[${room.id}] ${chalk.hex(color).bold(`${name} (${userToExclude})`)}: ${str}`);
 					break;
 				default: break;
 			}
 		}
 	} else {
-		console.log(`[${roomId}] ${message}`);
+		console.log(`[${room.id}] ${message}`);
 	}
-	const connections = getAllSocketsOfRoomId(roomId);
-	console.debug(`Broadcasting to ${connections.length} users`);
-	connections.forEach(conn => {
-		if(userLoginToExclude && conn.userLogin === userLoginToExclude)
-			return; // Don't send message back to the user who sent it when userLoginToExclude is specified
-		if(!io.sockets.connected[conn.socket])
+	const connections = getAllSessionsOfRoom(room);
+	connections.forEach(userSession => {
+		if(userToExclude && userSession === userToExclude)
+			return; // Don't send message back to the user who sent it when userToExclude is specified
+		if(!io.sockets.connected[userSession.socket])
 			return; // user must have disconnected or is not yet authenticated
-		io.sockets.connected[conn.socket].emit("sendMessage", message);
+		io.sockets.connected[userSession.socket].emit("sendMessage", message);
 	});
 }
 
-function broadcastCanvasToRoom(io, roomId, data, userLoginToExclude) {
-	console.debug(`Broadcasting canvas to room ${roomId}`);
-	const connections = getAllSocketsOfRoomId(roomId);
-	connections.forEach(conn => {
-		if(userLoginToExclude && conn.userLogin === userLoginToExclude)
-			return; // Don't send canvas back to the user who sent it when userLoginToExclude is specified
-		if(!io.sockets.connected[conn.socket])
+function broadcastCanvasToRoom(io, room, data, userToExclude) {
+	const connections = getAllSessionsOfRoom(room);
+	connections.forEach(userSession => {
+		if(userToExclude && userSession === userToExclude)
+			return; // Don't send canvas back to the user who sent it when userToExclude is specified
+		if(!io.sockets.connected[userSession.socket])
 			return; // user must have disconnected or is not yet authenticated
-		io.sockets.connected[conn.socket].emit("sendCanvas", data);
+		io.sockets.connected[userSession.socket].emit("sendCanvas", data);
 	});
 }
 
@@ -223,7 +179,8 @@ module.exports = function handleSocketUser(io) {
 		// return string (message)
 		client.on("auth", function(jsonString){
 			const authData = JSON.parse(jsonString);
-			const authResponseJson = authenticate(authData.login, authData.pass, authData.room, client.id);
+			const room = activeRooms[authData.room];
+			const authResponseJson = authenticate(authData.login, authData.pass, room, client.id);
 			io.sockets.connected[client.id].emit("auth", JSON.stringify(authResponseJson));
 			if(!authResponseJson.error) {
 				const welcomeMessage = {
@@ -231,72 +188,56 @@ module.exports = function handleSocketUser(io) {
 					user: authResponseJson.user, 
 					room: authData.room,
 				};
-				broadcastMessageToRoom(io, authData.room, welcomeMessage);
+				broadcastMessageToRoom(io, room, welcomeMessage);
 				// Send current canvas to joined user
-				const room = getRoomById(authData.room);
-				if(room.canvas){
-					room.canvas.getBufferAsync(Jimp.MIME_PNG)
-					.then(buffer=>
-						io.sockets.connected[client.id].emit("sendCanvas", {blob: buffer})
-					)
-					.catch(console.error);
-				}
+				room.canvas.getBufferAsync(Jimp.MIME_PNG)
+				.then(buffer=>
+					io.sockets.connected[client.id].emit("sendCanvas", {blob: buffer})
+				)
+				.catch(console.error);
 			}
 		});
 
 		// User sends chat message
 		// input string: message
 		client.on("sendMessage", function(message){
-			const userContext = identifyUserContextBySocket(client.id);
-			if(!userContext) {
+			const userSession = identifyUserSessionBySocket(client.id);
+			if(!userSession) {
 				io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before sending messages.");
 				return;
 			}
 			
-			// const now = new Date();
-			// message = `${now.toLocaleDateString()} ${now.toLocaleTimeString()} ${userContext.user.name}: ${message}`
 			const m = {
 				message,
 				type: MESSAGE_TYPES.USER_MESSAGE,
-				user: userProfiles[userContext.userLogin],
+				user: userSession.profile,
 			}
-			broadcastMessageToRoom(io, userContext.room, m, userContext.userLogin);
+			broadcastMessageToRoom(io, userSession.room, m, userSession);
 		});
 
-		// User requests for a canvas update
-		// input int: roomId
-		// input string: authToken
-		client.on("sync", function(msg){
-			console.log("Request for sync received");
-		});
+		// // User requests for a canvas update
+		// // input int: roomId
+		// // input string: authToken
+		// client.on("sync", function(msg){
+		// 	console.log("Request for sync received");
+		// });
 
 		// User sends a canvas update
 		client.on("sendCanvas", function(data){
-			const userContext = identifyUserContextBySocket(client.id);
-			if(!userContext) {
+			const userSession = identifyUserSessionBySocket(client.id);
+			if(!userSession) {
 				io.sockets.connected[client.id].emit("sendMessage", "You need to authenticate before drawing.");
 				return;
 			}
 
 			// Check if data exists
-			if(!data.blob){ return console.log(`Invalid canvas data received from ${userContext.user.name}`);
+			if(!data.blob){ return console.log(`Invalid canvas data received from ${userSession.name}`);
 			}
 
 			// Read data
 			Jimp.read(data.blob)
 			.then(image => {
-				const {room} = userContext;
-				if(!room.canvas){
-					// Canvas doesn't exist. Initialize with a blank white canvas
-					const width = 400, height = 400;
-					room.canvas = new Jimp(width, height, 0xffffffff, (err, image) => {
-						if(err){
-							console.error(err);
-							return;
-						}
-						image.opaque();
-					});
-				}
+				const {room} = userSession;
 				if(room.canvas){
 					// Combine user drawing with main canvas
 					const x = 0, y = 0;
@@ -307,14 +248,14 @@ module.exports = function handleSocketUser(io) {
 					.getBufferAsync(Jimp.MIME_PNG)
 					// Broadcast new canvas
 					.then(buffer=>
-						broadcastCanvasToRoom(io, userContext.room, {blob: buffer}, userContext.user.userLogin)
+						broadcastCanvasToRoom(io, room, {blob: buffer}, userSession)
 					)
 					.catch(console.error);
 					room.canvas = image;
 				}
 				
 			})
-			.catch(err=>console.log(`Unable to read canvas data received from ${userContext.user.name}`,err));
+			.catch(err=>console.log(`Unable to read canvas data received from ${userSession.name}`,err));
 			
 		});
 
