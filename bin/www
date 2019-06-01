@@ -21,7 +21,8 @@ app.set('port', port);
 
 var server = http.createServer(app);
 var io = require('socket.io').listen(server);
-require('../sockets/base')(io);
+const Room = new require('../sockets/base');
+const test_room = new Room(io,"test_room");
 
 /**
  * Listen on provided port, on all network interfaces.
