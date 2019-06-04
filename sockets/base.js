@@ -122,7 +122,7 @@ class Room {
 		} else {
 			console.log(`[${namespace}] ${message}`);
 		}
-		broadcast.emit("sendMessage", message);
+		broadcast.emit("message", message);
 	}
 	openSockets(io, namespace){
 		const nsp = io.of(namespace);
@@ -151,7 +151,7 @@ class Room {
 					// Send current canvas to joined user
 					this.canvas.getBufferAsync(Jimp.MIME_PNG)
 					.then(buffer=>
-						client.emit("sendCanvas", {blob: buffer})
+						client.emit("canvas", {blob: buffer})
 					)
 					.catch(console.error);
 				}
@@ -159,10 +159,10 @@ class Room {
 
 			// User sends chat message
 			// input string: message
-			client.on("sendMessage", message => {
+			client.on("message", message => {
 				const userSession = this.identifyUserSessionBySocket(client);
 				if(!userSession) {
-					client.emit("sendMessage", "You need to authenticate before sending messages.");
+					client.emit("message", "You need to authenticate before sending messages.");
 					return;
 				}
 				
@@ -182,10 +182,10 @@ class Room {
 			// });
 
 			// User sends a canvas update
-			client.on("sendCanvas", data => {
+			client.on("canvas", data => {
 				const userSession = this.identifyUserSessionBySocket(client);
 				if(!userSession) {
-					client.emit("sendMessage", "You need to authenticate before drawing.");
+					client.emit("message", "You need to authenticate before drawing.");
 					return;
 				}
 
@@ -206,7 +206,7 @@ class Room {
 						.getBufferAsync(Jimp.MIME_PNG)
 						// Broadcast new canvas
 						.then(buffer=>
-							nsp.emit("sendCanvas", {blob: buffer})
+							nsp.emit("canvas", {blob: buffer})
 						)
 						.catch(console.error);
 						this.canvas = image;
