@@ -21,6 +21,7 @@ class UserSession {
 const MESSAGE_TYPES = Object.freeze({
 	USER_MESSAGE: "user_message",
 	USER_JOIN: "user_join",
+	USER_DISCONNECT: "user_disconnect",
 });
 
 // Test variables
@@ -68,7 +69,9 @@ class Room {
 		});
 		this.openSockets(io, namespace);
 	}
-
+	log(...logParams){
+		console.log(`[${this.namespace}]`, ...logParams);
+	}
 	authenticate(userLogin, socket) {
 		// Assert: That room exists
 		// if(!room){
@@ -114,13 +117,13 @@ class Room {
 				switch(message.type){
 					case MESSAGE_TYPES.USER_MESSAGE:
 						const {user: {color, name}, message: str} = message;
-						console.log(`[${this.namespace}] ${chalk.hex(color).bold(`${name}`)}: ${str}`);
+						this.log(`[${this.namespace}] ${chalk.hex(color).bold(`${name}`)}: ${str}`);
 						break;
 					default: break;
 				}
 			}
 		} else {
-			console.log(`[${namespace}] ${message}`);
+			this.log(`[${namespace}] ${message}`);
 		}
 		broadcast.emit("message", message);
 	}
@@ -141,11 +144,11 @@ class Room {
 				const authData = JSON.parse(jsonString);
 				const authResponseJson = this.authenticate(authData.login, client);
 				client.emit("auth", JSON.stringify(authResponseJson));
-				if(!authResponseJson.error) {
+				if(!authResponseJson.error){
+					this.log(`${authResponseJson.user.name} has connected`);
 					const welcomeMessage = {
 						type: MESSAGE_TYPES.USER_JOIN, 
 						user: authResponseJson.user, 
-						room: authData.room,
 					};
 					this.broadcastMessage(nsp, welcomeMessage);
 					// Send current canvas to joined user
@@ -157,6 +160,17 @@ class Room {
 				}
 			});
 
+			client.on('disconnect', reason => {
+				const userSession = this.identifyUserSessionBySocket(client);
+				if(userSession){
+					this.log(`${userSession.profile.name} has disconnected. Reason: ${reason}`);
+					this.broadcastMessage(nsp, {
+						type: MESSAGE_TYPES.USER_DISCONNECT, 
+						user: userSession.profile,
+					});
+				}
+			});
+
 			// User sends chat message
 			// input string: message
 			client.on("message", message => {
@@ -165,7 +179,6 @@ class Room {
 					client.emit("message", "You need to authenticate before sending messages.");
 					return;
 				}
-				
 				const m = {
 					message,
 					type: MESSAGE_TYPES.USER_MESSAGE,
@@ -178,7 +191,7 @@ class Room {
 			// // input int: roomId
 			// // input string: authToken
 			// client.on("sync", function(msg){
-			// 	console.log("Request for sync received");
+			// 	this.log("Request for sync received");
 			// });
 
 			// User sends a canvas update
@@ -190,7 +203,8 @@ class Room {
 				}
 
 				// Check if data exists
-				if(!data.blob){ return console.log(`Invalid canvas data received from ${userSession.name}`);
+				if(!data.blob){ 
+					return this.log(`Invalid canvas data received from ${userSession.name}`);
 				}
 
 				// Read data
@@ -213,7 +227,7 @@ class Room {
 					}
 					
 				})
-				.catch(err=>console.log(`Unable to read canvas data received from ${userSession.name}`, err));
+				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.name}`, err));
 			});
 
 		});
