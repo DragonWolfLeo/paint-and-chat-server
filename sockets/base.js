@@ -52,12 +52,12 @@ const INITIAL_USER_PROFILES = Object.freeze({
 
 
 class Room {
-	constructor(io, namespace){
+	constructor(io, id){
 		// User profiles; Non-sensitive user data goes here
 		this.userProfiles = {...INITIAL_USER_PROFILES}
 		this.activeUsers = {};
 		this.io = io;
-		this.namespace = namespace;
+		this.id = id;
 		// Initialize with a blank white canvas
 		const width = 400, height = 400;
 		this.canvas = new Jimp(width, height, 0xffffffff, (err, image) => {
@@ -67,10 +67,10 @@ class Room {
 			}
 			image.opaque();
 		});
-		this.openSockets(io, namespace);
+		this.openSockets(io, id);
 	}
 	log(...logParams){
-		console.log(`[${this.namespace}]`, ...logParams);
+		console.log(`[${this.id}]`, ...logParams);
 	}
 	authenticate(userLogin, socket) {
 		// Assert: That room exists
@@ -117,18 +117,18 @@ class Room {
 				switch(message.type){
 					case MESSAGE_TYPES.USER_MESSAGE:
 						const {user: {color, name}, message: str} = message;
-						this.log(`[${this.namespace}] ${chalk.hex(color).bold(`${name}`)}: ${str}`);
+						this.log(`${chalk.hex(color).bold(`${name}`)}: ${str}`);
 						break;
 					default: break;
 				}
 			}
 		} else {
-			this.log(`[${namespace}] ${message}`);
+			this.log(`[${id}] ${message}`);
 		}
 		broadcast.emit("message", message);
 	}
-	openSockets(io, namespace){
-		const nsp = io.of(namespace);
+	openSockets(io, id){
+		const nsp = io.of(id);
 		nsp.on('connection', client => {
 			// User authenticates to get a valid authToken
 			// Message 1: Sent to user online
