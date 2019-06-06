@@ -54,7 +54,7 @@ const INITIAL_USER_PROFILES = Object.freeze({
 class Room {
 	constructor(io, id){
 		// User profiles; Non-sensitive user data goes here
-		this.userProfiles = {...INITIAL_USER_PROFILES}
+		this.userProfiles = {};
 		this.activeUsers = {};
 		this.io = io;
 		this.id = id;
@@ -67,12 +67,28 @@ class Room {
 			}
 			image.opaque();
 		});
-		this.openSockets(io, id);
+		this.authSockets(io, id);
 	}
 	log(...logParams){
 		console.log(`[${this.id}]`, ...logParams);
 	}
-	authenticate(userLogin, socket) {
+	error(...logParams){
+		console.error(`[${this.id}]`, ...logParams);
+	}
+	generateUserToken(name, color){
+		if(!name || !color){
+			return null;
+		}
+		// Choose a random hash for the token
+		let t;
+		do {
+			t = Math.random().toString(36).substring(7);
+		} while (this.userProfiles[t]);
+		// TODO: Maybe let tokens expire after some time
+		this.userProfiles[t] = new UserProfile(name, color);
+		return t;
+	}
+	authenticate(token, socket) {
 		// Assert: That room exists
 		// if(!room){
 		// 	return {
@@ -90,18 +106,21 @@ class Room {
 		// 		error: `Incorrect login/password for ${userLogin}`,
 		// 	};
 		// Assign new token then return it
-		const token = Math.random().toString(36).substring(7);
+		// const token = Math.random().toString(36).substring(7);
 
-		const userProfile = this.userProfiles[userLogin];
+		if(!token){
+			return {
+				error: `No token provided by socket ${socket.id}`,
+			}
+		}
+		const userProfile = this.userProfiles[token];
 		this.activeUsers[socket.id] = new UserSession(socket, userProfile);
-		
 		if(!userProfile){
 			return {
-				error: `Could not find user profile for ${userLogin}`,
+				error: `Could not find user profile for ${token} by from ${socket.id}`,
 			}
 		}
 		return {
-			token,
 			user: userProfile,
 		};
 	}
@@ -127,9 +146,14 @@ class Room {
 		}
 		broadcast.emit("message", message);
 	}
-	openSockets(io, id){
-		const nsp = io.of(id);
+	authSockets(io, roomId){
+		const nsp = io.of(roomId);
 		nsp.on('connection', client => {
+			// Disconnect the client if not authenticated within a timeframe
+			const disconnectTask = setTimeout(()=>{
+				client.disconnect(true);
+				this.error(`Disconnected socket ${client.id}; Reason: No response`);
+			},5000);
 			// User authenticates to get a valid authToken
 			// Message 1: Sent to user online
 			// input string: login
@@ -140,15 +164,14 @@ class Room {
 			// returns User: user
 			// Message 2: Broadcasted to all users in room
 			// return string (message)
-			client.on("auth", jsonString => {
-				const authData = JSON.parse(jsonString);
-				const authResponseJson = this.authenticate(authData.login, client);
-				client.emit("auth", JSON.stringify(authResponseJson));
-				if(!authResponseJson.error){
-					this.log(`${authResponseJson.user.name} has connected`);
+			client.on("auth", token => {
+				const authResponse = this.authenticate(token, client);
+				client.emit("auth", authResponse);
+				if(!authResponse.error){
+					this.log(`${authResponse.user.name} has connected`);
 					const welcomeMessage = {
 						type: MESSAGE_TYPES.USER_JOIN, 
-						user: authResponseJson.user, 
+						user: authResponse.user,
 					};
 					this.broadcastMessage(nsp, welcomeMessage);
 					// Send current canvas to joined user
@@ -157,79 +180,85 @@ class Room {
 						client.emit("canvas", {blob: buffer})
 					)
 					.catch(console.error);
+					this.openSockets(nsp, client);
+					clearTimeout(disconnectTask);
+				} else {
+					client.disconnect(true);
+					console.error(authResponse.error);
 				}
 			});
-
-			client.on('disconnect', reason => {
-				const userSession = this.identifyUserSessionBySocket(client);
-				if(userSession){
-					this.log(`${userSession.profile.name} has disconnected. Reason: ${reason}`);
-					this.broadcastMessage(nsp, {
-						type: MESSAGE_TYPES.USER_DISCONNECT, 
-						user: userSession.profile,
-					});
-				}
-			});
-
-			// User sends chat message
-			// input string: message
-			client.on("message", message => {
-				const userSession = this.identifyUserSessionBySocket(client);
-				if(!userSession) {
-					client.emit("message", "You need to authenticate before sending messages.");
-					return;
-				}
-				const m = {
-					message,
-					type: MESSAGE_TYPES.USER_MESSAGE,
+		});
+	}
+	openSockets = (nsp, client) => {
+		client.on('disconnect', reason => {
+			const userSession = this.identifyUserSessionBySocket(client);
+			if(userSession){
+				this.log(`${userSession.profile.name} has disconnected. Reason: ${reason}`);
+				this.broadcastMessage(nsp, {
+					type: MESSAGE_TYPES.USER_DISCONNECT, 
 					user: userSession.profile,
+				});
+			}
+			// TODO: Remove event listeners on disconnect
+		});
+
+		// User sends chat message
+		// input string: message
+		client.on("message", message => {
+			const userSession = this.identifyUserSessionBySocket(client);
+			if(!userSession) {
+				client.emit("message", "You need to authenticate before sending messages.");
+				return;
+			}
+			const m = {
+				message,
+				type: MESSAGE_TYPES.USER_MESSAGE,
+				user: userSession.profile,
+			}
+			this.broadcastMessage(client.broadcast, m, userSession);
+		});
+
+		// // User requests for a canvas update
+		// // input int: roomId
+		// // input string: authToken
+		// client.on("sync", function(msg){
+		// 	this.log("Request for sync received");
+		// });
+
+		// User sends a canvas update
+		client.on("canvas", data => {
+			const userSession = this.identifyUserSessionBySocket(client);
+			if(!userSession) {
+				client.emit("message", "You need to authenticate before drawing.");
+				return;
+			}
+
+			// Check if data exists
+			if(!data.blob){ 
+				return this.log(`Invalid canvas data received from ${userSession.name}`);
+			}
+
+			// Read data
+			Jimp.read(data.blob)
+			.then(image => {
+				if(this.canvas){
+					// Combine user drawing with main canvas
+					const x = 0, y = 0;
+					image.composite(this.canvas, x, y, {  
+						mode: Jimp.BLEND_DESTINATION_OVER,
+					})
+					// Convert to buffer
+					.getBufferAsync(Jimp.MIME_PNG)
+					// Broadcast new canvas
+					.then(buffer=>
+						nsp.emit("canvas", {blob: buffer})
+					)
+					.catch(console.error);
+					this.canvas = image;
 				}
-				this.broadcastMessage(client.broadcast, m, userSession);
-			});
-
-			// // User requests for a canvas update
-			// // input int: roomId
-			// // input string: authToken
-			// client.on("sync", function(msg){
-			// 	this.log("Request for sync received");
-			// });
-
-			// User sends a canvas update
-			client.on("canvas", data => {
-				const userSession = this.identifyUserSessionBySocket(client);
-				if(!userSession) {
-					client.emit("message", "You need to authenticate before drawing.");
-					return;
-				}
-
-				// Check if data exists
-				if(!data.blob){ 
-					return this.log(`Invalid canvas data received from ${userSession.name}`);
-				}
-
-				// Read data
-				Jimp.read(data.blob)
-				.then(image => {
-					if(this.canvas){
-						// Combine user drawing with main canvas
-						const x = 0, y = 0;
-						image.composite(this.canvas, x, y, {  
-							mode: Jimp.BLEND_DESTINATION_OVER,
-						})
-						// Convert to buffer
-						.getBufferAsync(Jimp.MIME_PNG)
-						// Broadcast new canvas
-						.then(buffer=>
-							nsp.emit("canvas", {blob: buffer})
-						)
-						.catch(console.error);
-						this.canvas = image;
-					}
-					
-				})
-				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.name}`, err));
-			});
-
+				
+			})
+			.catch(err=>this.log(`Unable to read canvas data received from ${userSession.name}`, err));
 		});
 	}
 }

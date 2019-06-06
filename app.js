@@ -41,7 +41,12 @@ app.post('/create', (req, res) => {
 		return res.status(400).json("There was an error.");
 	}
 	const room = createRoom();
-	res.json({room: room.id});
+	const token = room.generateUserToken(name, color);
+	if(token){
+		res.json({room: room.id, token});
+	} else {
+		res.status(400).json("There was an error");
+	}
 });
 app.post('/join/:room', (req, res) => {
 	const {room} = req.params;
