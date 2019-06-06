@@ -12,7 +12,7 @@ var server = require('http').Server(app);
 var io = require('socket.io')(server);
 
 const Room = require('./sockets/base');
-const rooms = {};
+const rooms = {room1: new Room(io, "room1")};
 
 app.use(logger('dev'));
 app.use(express.json());
@@ -36,6 +36,7 @@ const createRoom = () => {
 	return room;
 }
 app.post('/create', (req, res) => {
+	// TODO: Make rooms expire when unused
 	const {name, color} = req.body;
 	if(!name || !color){
 		return res.status(400).json("There was an error.");
@@ -49,11 +50,17 @@ app.post('/create', (req, res) => {
 	}
 });
 app.post('/join/:room', (req, res) => {
-	const {room} = req.params;
-	if(room){
-		res.json(`Success! You've joined room ${room}`);
+	const {room: id} = req.params;
+	const room = rooms[id];
+	const {name, color} = req.body;
+	if(!room || !name || !color){
+		return res.status(400).json("There was an error.");
+	}
+	const token = room.generateUserToken(name, color);
+	if(token){
+		res.json({room: room.id, token});
 	} else {
-		res.status(400).json(`No room specified`);
+		res.status(400).json("There was an error");
 	}
 });
 

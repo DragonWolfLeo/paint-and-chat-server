@@ -155,20 +155,13 @@ class Room {
 				this.error(`Disconnected socket ${client.id}; Reason: No response`);
 			},5000);
 			// User authenticates to get a valid authToken
-			// Message 1: Sent to user online
-			// input string: login
-			// input string: pass
-			// input string: room
-			// returns string: token
-			// returns string: error
-			// returns User: user
-			// Message 2: Broadcasted to all users in room
-			// return string (message)
-			client.on("auth", token => {
+			client.once("auth", token => {
 				const authResponse = this.authenticate(token, client);
+				// Send name and color to user
 				client.emit("auth", authResponse);
 				if(!authResponse.error){
 					this.log(`${authResponse.user.name} has connected`);
+					// Broadcast welcome message to all users in room
 					const welcomeMessage = {
 						type: MESSAGE_TYPES.USER_JOIN, 
 						user: authResponse.user,
@@ -180,6 +173,7 @@ class Room {
 						client.emit("canvas", {blob: buffer})
 					)
 					.catch(console.error);
+					// 
 					this.openSockets(nsp, client);
 					clearTimeout(disconnectTask);
 				} else {
