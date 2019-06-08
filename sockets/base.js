@@ -26,33 +26,6 @@ const MESSAGE_TYPES = Object.freeze({
 
 const AUTHORIZED = "authorized";
 
-// // Test variables
-// const INITIAL_USER_PROFILES = Object.freeze({
-// 	user: new UserProfile("User", "#009900"),
-// 	leo: new UserProfile("Dragon Wolf Leo", "#FF6600"),
-// 	luka: new UserProfile("Luka Loginska", "#0051F3"),
-// 	vada: new UserProfile("VAdaPEGA", "#FF0000"),
-// });
-
-// // Mock database structure
-// const mockLoginDatabase = {
-// 	users: {
-// 		user: {
-// 			pass: "users_pass",
-// 		},//User: object
-// 		leo: {
-// 			pass: "users_pass",
-// 		},//User: object
-// 		luka: {
-// 			pass: "users_pass",
-// 		},//User: object
-// 		vada: {
-// 			pass: "users_pass",
-// 		},//User: object
-// 	},//Array<User>: object[string:userLogin],
-// };
-
-
 class Room {
 	constructor(io, id){
 		// User profiles; Non-sensitive user data goes here

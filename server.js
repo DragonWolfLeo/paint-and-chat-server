@@ -4,9 +4,6 @@ var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 const cors = require("cors");
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
-
 var app = express();
 var server = require('http').Server(app);
 var io = require('socket.io')(server);
@@ -20,9 +17,6 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(cors());
-
-// app.use('/', indexRouter);
-// app.use('/users', usersRouter);
 
 const createRoom = () => {
 	// Choose a random hash for the id
@@ -43,7 +37,7 @@ app.post('/create', (req, res) => {
 	}
 	const room = createRoom();
 	const token = room.generateUserToken(name, color);
-	if(token){
+	if(token && room){
 		res.json({room: room.id, token});
 	} else {
 		res.status(400).json("There was an error");
@@ -52,8 +46,11 @@ app.post('/create', (req, res) => {
 app.post('/join/:room', (req, res) => {
 	const {room: id} = req.params;
 	const room = rooms[id];
+	if(!room){
+		return res.status(404).json({alert: "Room does not exist."});
+	}
 	const {name, color} = req.body;
-	if(!room || !name || !color){
+	if(!name || !color){
 		return res.status(400).json("There was an error.");
 	}
 	const token = room.generateUserToken(name, color);
@@ -63,7 +60,6 @@ app.post('/join/:room', (req, res) => {
 		res.status(400).json("There was an error");
 	}
 });
-
 
 const port = process.env.PORT || 3001;
 server.listen(port,()=>{
