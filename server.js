@@ -32,8 +32,8 @@ const createRoom = () => {
 	rooms[id] = room;
 	return room;
 }
+// Requesting to create a room
 app.post('/create', (req, res) => {
-	// TODO: Make rooms expire when unused
 	const {name, color} = req.body;
 	if(!name || !color){
 		return res.status(400).json("There was an error.");
@@ -46,6 +46,7 @@ app.post('/create', (req, res) => {
 		res.status(400).json("There was an error");
 	}
 });
+// Requesting to join a room
 app.post('/join/:room', (req, res) => {
 	const {room: id} = req.params;
 	const room = rooms[id];
