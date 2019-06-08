@@ -9,7 +9,7 @@ var server = require('http').Server(app);
 var io = require('socket.io')(server);
 
 const Room = require('./sockets/base');
-const rooms = {room1: new Room(io, "room1")};
+const rooms = {};
 
 app.use(logger('dev'));
 app.use(express.json());
@@ -24,7 +24,10 @@ const createRoom = () => {
 	do {
 		id = Math.random().toString(36).substring(7);
 	} while (rooms[id]);
-	const room = new Room(io, id);
+	const room = new Room(io, id, ()=>{
+		console.debug(`Room ${id} has been deleted`);
+		delete rooms[id];
+	});
 	console.log(`Created room ${id}`);
 	rooms[id] = room;
 	return room;

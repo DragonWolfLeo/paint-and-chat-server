@@ -26,13 +26,17 @@ const MESSAGE_TYPES = Object.freeze({
 
 const AUTHORIZED = "authorized";
 
+const DELETE_ROOM_TIME = 1000*60*5; //5 minutes
+
 class Room {
-	constructor(io, id){
-		// User profiles; Non-sensitive user data goes here
+	constructor(io, id, deleteRoom){
 		this.userProfiles = {};
 		this.usersBySocketId = {};
 		this.io = io;
 		this.id = id;
+		this.deleteRoom = deleteRoom;
+		this.deleteRoomTask = null;
+		this.numUsers = 0;
 		// Initialize with a blank white canvas
 		const width = 400, height = 400;
 		this.canvas = new Jimp(width, height, 0xffffffff, (err, image) => {
@@ -42,11 +46,21 @@ class Room {
 			}
 			image.opaque();
 		});
-		this.onConnect(io, id);
+		this.closeSockets = this.openSockets(io, id);
+		this.startDeleteRoomTask(deleteRoom);
 	}
+
 	log = (...logParams) => console.log(`[${this.id}]`, ...logParams);
 	error = (...logParams) => console.error(`[${this.id}]`, ...logParams);
+
+	startDeleteRoomTask = () => this.deleteRoomTask = setTimeout(()=>{
+		this.closeSockets();
+		this.deleteRoom();
+	}, DELETE_ROOM_TIME);
+	stopDeleteRoomTask = () => clearTimeout(this.deleteRoomTask);
+
 	identifyUserSessionBySocket = socket => this.usersBySocketId[socket.id];
+
 	generateUserToken(name, color){
 		if(!name || !color){
 			return null;
@@ -97,9 +111,11 @@ class Room {
 		}
 		broadcast.emit("message", message);
 	}
-	onConnect(io, roomId){
+	openSockets(io, roomId){
 		const nsp = io.of(roomId);
-		nsp.on('connection', client => {
+		const onConnect = client => {
+			this.numUsers++;
+			this.stopDeleteRoomTask(); // Cancel delete room task
 			// Disconnect the client if not authenticated within a timeframe
 			const disconnectTask = setTimeout(()=>{
 				client.disconnect(true);
@@ -129,7 +145,19 @@ class Room {
 					console.error(authResponse.error);
 				}
 			});
-		});
+			client.once("disconnect", () => {
+				this.numUsers--;
+				if(this.numUsers === 0) {
+					// Prepare to delete room if no one is on
+					this.startDeleteRoomTask();
+				}
+			});
+		}
+		nsp.on('connection', onConnect);
+		// Return function to remove listener
+		return ()=>{
+			nsp.off('connection', onConnect);
+		}
 	}
 	authSocket = (nsp, client) => {
 		client.join(AUTHORIZED,()=>{
