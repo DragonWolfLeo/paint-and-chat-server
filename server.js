@@ -3,6 +3,8 @@ var path = require('path');
 var cookieParser = require('cookie-parser');
 var logger = require('morgan');
 const cors = require("cors");
+const dotenv = require('dotenv');
+dotenv.config();
 
 var app = express();
 var server = require('http').Server(app);
@@ -45,6 +47,7 @@ app.post('/create', (req, res) => {
 	} else {
 		res.status(400).json("There was an error");
 	}
+	console.log(process.env.PORT);
 });
 // Requesting to join a room
 app.post('/join/:room', (req, res) => {
