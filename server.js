@@ -47,7 +47,6 @@ app.post('/create', (req, res) => {
 	} else {
 		res.status(400).json("There was an error");
 	}
-	console.log(process.env.PORT);
 });
 // Requesting to join a room
 app.post('/join/:room', (req, res) => {
