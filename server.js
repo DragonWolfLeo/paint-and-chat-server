@@ -27,7 +27,7 @@ const createRoom = () => {
 		id = Math.random().toString(36).substring(7);
 	} while (rooms[id]);
 	const room = new Room(io, id, ()=>{
-		console.debug(`Room ${id} has been deleted`);
+		console.log(`Room ${id} has been expired.`);
 		delete rooms[id];
 	});
 	console.log(`Created room ${id}`);

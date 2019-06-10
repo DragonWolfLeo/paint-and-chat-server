@@ -1,5 +1,4 @@
 const Jimp = require("jimp");
-const chalk = require('chalk');
 
 // Classes
 class UserProfile {
@@ -78,14 +77,14 @@ class Room {
 		// Assert for token
 		if(!token){
 			return {
-				error: `No token provided by socket ${socket.id}`,
+				error: `No token provided by socket ${socket.id}.`,
 			}
 		}
 		// Check if user profile exists for token
 		const userProfile = this.userProfiles[token];
 		if(!userProfile){
 			return {
-				error: `Could not find user profile for ${token} by from ${socket.id}`,
+				error: `Could not find user profile for ${token} by from ${socket.id}.`,
 			}
 		}
 		this.usersBySocketId[socket.id] = new UserSession(socket, userProfile);
@@ -93,22 +92,7 @@ class Room {
 			user: userProfile,
 		};
 	}
-
 	broadcastMessage(broadcast, message) {
-		// Log message
-		if(typeof(message) === "object"){
-			if(message.type){
-				switch(message.type){
-					case MESSAGE_TYPES.USER_MESSAGE:
-						const {user: {color, name}, message: str} = message;
-						this.log(`${chalk.hex(color).bold(`${name}`)}: ${str}`);
-						break;
-					default: break;
-				}
-			}
-		} else {
-			this.log(`[${id}] ${message}`);
-		}
 		broadcast.emit("message", message);
 	}
 	openSockets(io, roomId){
@@ -126,7 +110,7 @@ class Room {
 				const authResponse = this.authenticate(token, client);
 				client.emit("auth", authResponse); // Send name and color to user
 				if(!authResponse.error){
-					this.log(`${authResponse.user.name} has connected`);
+					this.log(`${authResponse.user.name} has connected.`);
 					this.authSocket(nsp, client); // Add into the authorized room
 					// Broadcast welcome message to all users in room
 					this.broadcastMessage(nsp.in(AUTHORIZED), {
@@ -178,7 +162,7 @@ class Room {
 			client.on("message", message => {
 				const userSession = this.identifyUserSessionBySocket(client);
 				if(!userSession) {
-					client.emit("message", "You need to authenticate before sending messages.");
+					this.error("Invalid user:", userSession);
 					return;
 				}
 				const m = {
@@ -193,7 +177,7 @@ class Room {
 			client.on("canvas", data => {
 				const userSession = this.identifyUserSessionBySocket(client);
 				if(!userSession) {
-					client.emit("message", "You need to authenticate before drawing.");
+					this.error("Invalid user:", userSession);
 					return;
 				}
 
