@@ -34,19 +34,23 @@ const createRoom = () => {
 	rooms[id] = room;
 	return room;
 }
+const getNameAndColorFromBody = ({name, color}) =>{
+	// Check if name and color is valid, and trim name
+	return (name && color && typeof(name) === "string" && typeof(color) === "string") ?
+		{name: name.trim().substring(0,20), color} : {};
+};
 // Requesting to create a room
 app.post('/create', (req, res) => {
-	const {name, color} = req.body;
+	const {name, color} = getNameAndColorFromBody(req.body);
 	if(!name || !color){
 		return res.status(400).json("There was an error.");
 	}
 	const room = createRoom();
 	const token = room.generateUserToken(name, color);
-	if(token && room){
-		res.json({room: room.id, token});
-	} else {
-		res.status(400).json("There was an error");
+	if(token){
+		return res.json({room: room.id, token});
 	}
+	return res.status(400).json("There was an error");
 });
 // Requesting to join a room
 app.post('/join/:room', (req, res) => {
@@ -55,16 +59,15 @@ app.post('/join/:room', (req, res) => {
 	if(!room){
 		return res.status(404).json({alert: "Room does not exist."});
 	}
-	const {name, color} = req.body;
+	const {name, color} = getNameAndColorFromBody(req.body);
 	if(!name || !color){
 		return res.status(400).json("There was an error.");
 	}
 	const token = room.generateUserToken(name, color);
 	if(token){
-		res.json({room: room.id, token});
-	} else {
-		res.status(400).json("There was an error");
+		return res.json({room: room.id, token});
 	}
+	return res.status(400).json("There was an error");
 });
 
 const port = process.env.PORT || 3001;

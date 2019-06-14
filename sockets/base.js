@@ -61,6 +61,7 @@ class Room {
 	identifyUserSessionBySocket = socket => this.usersBySocketId[socket.id];
 
 	generateUserToken(name, color){
+		name = name.trim();
 		if(!name || !color){
 			return null;
 		}
@@ -160,6 +161,9 @@ class Room {
 			// User sends chat message
 			// input string: message
 			client.on("message", message => {
+				if(message.length > 1000){
+					return; // Cancel message if above the character limit (Also enforced on the client-side)
+				}
 				const userSession = this.identifyUserSessionBySocket(client);
 				if(!userSession) {
 					this.error("Invalid user:", userSession);
