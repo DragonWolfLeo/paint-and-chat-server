@@ -74,6 +74,7 @@ class Room {
 		this.userProfiles[t] = new UserProfile(name, color);
 		return t;
 	}
+	hasToken = token => this.userProfiles[token] !== undefined;
 	authenticate(token, socket) {
 		// Assert for token
 		if(!token){

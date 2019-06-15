@@ -70,12 +70,14 @@ app.post('/join/:room', (req, res) => {
 	return res.status(400).json("There was an error");
 });
 // Check if room exists
-app.get('/check/:room', (req, res) => {
-	const {room: id} = req.params;
+app.get('/check/:room/:token?', (req, res) => {
+	const {room: id, token} = req.params;
 	const room = rooms[id];
-	return room ? 
-		res.json(true) :
-		res.status(404).json(false);
+	if(room){
+		const authorized = token ? room.hasToken(token) : false;
+		return res.json({authorized}) 
+	}
+	return res.status(404).json(false);
 });
 
 const port = process.env.PORT || 3001;
