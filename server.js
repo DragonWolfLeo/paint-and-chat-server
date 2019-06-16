@@ -10,8 +10,11 @@ var app = express();
 var server = require('http').Server(app);
 var io = require('socket.io')(server);
 
+const {getOwnProperty} = require('./util');
+
 const Room = require('./sockets/base');
 const rooms = {};
+
 
 app.use(logger('dev'));
 app.use(express.json());
@@ -55,7 +58,7 @@ app.post('/create', (req, res) => {
 // Requesting to join a room
 app.post('/join/:room', (req, res) => {
 	const {room: id} = req.params;
-	const room = rooms[id];
+	const room = getOwnProperty(rooms, id);
 	if(!room){
 		return res.status(404).json({alert: "Room does not exist."});
 	}
@@ -72,7 +75,7 @@ app.post('/join/:room', (req, res) => {
 // Check if room exists
 app.get('/check/:room/:token?', (req, res) => {
 	const {room: id, token} = req.params;
-	const room = rooms[id];
+	const room = getOwnProperty(rooms, id);
 	if(room){
 		const authorized = token ? room.hasToken(token) : false;
 		return res.json({authorized}) 

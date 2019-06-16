@@ -1,4 +1,5 @@
 const Jimp = require("jimp");
+const {getOwnProperty} = require('../util');
 
 // Classes
 class UserProfile {
@@ -25,7 +26,7 @@ const MESSAGE_TYPES = Object.freeze({
 
 const AUTHORIZED = "authorized";
 
-const DELETE_ROOM_TIME = 1000*60*5; //5 minutes
+const EXPIRE_TIME = 1000*60*5; //5 minutes
 
 class Room {
 	constructor(io, id, deleteRoom){
@@ -55,7 +56,7 @@ class Room {
 	startDeleteRoomTask = () => this.deleteRoomTask = setTimeout(()=>{
 		this.closeSockets();
 		this.deleteRoom();
-	}, DELETE_ROOM_TIME);
+	}, EXPIRE_TIME);
 	stopDeleteRoomTask = () => clearTimeout(this.deleteRoomTask);
 
 	identifyUserSessionBySocket = socket => this.usersBySocketId[socket.id];
@@ -74,7 +75,7 @@ class Room {
 		this.userProfiles[t] = new UserProfile(name, color);
 		return t;
 	}
-	hasToken = token => this.userProfiles[token] !== undefined;
+	hasToken = token => getOwnProperty(this.userProfiles, token) !== undefined;
 	authenticate(token, socket) {
 		// Assert for token
 		if(!token){
@@ -83,7 +84,7 @@ class Room {
 			}
 		}
 		// Check if user profile exists for token
-		const userProfile = this.userProfiles[token];
+		const userProfile = getOwnProperty(this.userProfiles, token);
 		if(!userProfile){
 			return {
 				error: `Could not find user profile for ${token} by from ${socket.id}.`,
@@ -110,7 +111,11 @@ class Room {
 			// User authenticates to gain access to socket
 			client.once("auth", token => {
 				const authResponse = this.authenticate(token, client);
-				client.emit("auth", authResponse); // Send name and color to user
+				 // Send name and color to user
+				client.emit("auth", {
+					user: authResponse.user,
+					error: authResponse.error && "Failed to authenticate"
+				});
 				if(!authResponse.error){
 					this.log(`${authResponse.user.name} has connected.`);
 					this.authSocket(nsp, client); // Add into the authorized room
