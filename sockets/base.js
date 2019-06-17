@@ -28,6 +28,10 @@ const AUTHORIZED = "authorized";
 
 const EXPIRE_TIME = 1000*60*5; //5 minutes
 
+// Utility functions
+const isNonNegativeNumberFn = v => () => typeof(v) === "number" && v >= 0;
+const isNotNullFn = v => () => !v === false;
+
 class Room {
 	constructor(io, id, deleteRoom){
 		this.userProfiles = {};
@@ -126,9 +130,10 @@ class Room {
 					});
 					// Send current canvas to joined user
 					this.canvas.getBufferAsync(Jimp.MIME_PNG)
-					.then(buffer=>
-						client.emit("canvas", {blob: buffer})
-					)
+					.then(buffer=>{
+						const {bitmap: {width, height}} = this.canvas;
+						client.emit("canvas", {buffer, x: 0, y: 0, width, height});
+					})
 					.catch(console.error);
 					clearTimeout(disconnectTask); // Cancel disconnect task
 				} else {
@@ -191,31 +196,43 @@ class Room {
 					return;
 				}
 
-				// Check if data exists
-				if(!data.blob){ 
-					return this.log(`Invalid canvas data received from ${userSession.name}`);
+				// Check if data is valid
+				const {blob, x, y, width, height} = data;
+				const validityChecks = [
+					isNotNullFn(blob),
+					isNonNegativeNumberFn(x),
+					isNonNegativeNumberFn(y),
+					isNonNegativeNumberFn(width),
+					isNonNegativeNumberFn(height),
+				];
+				for(let fn of validityChecks){
+					if(!fn()){
+						return this.log(`Invalid canvas data received from ${userSession.profile.name}`);
+					}
 				}
 
 				// Read data
-				Jimp.read(data.blob)
+				Jimp.read(blob)
 				.then(image => {
 					if(this.canvas){
-						// Combine user drawing with main canvas
-						const x = 0, y = 0;
-						image.composite(this.canvas, x, y, {  
-							mode: Jimp.BLEND_DESTINATION_OVER,
+						// Combine main canvas with user drawing
+						this.canvas.composite(image, x, y, {  
+							mode: Jimp.BLEND_SOURCE_OVER,
 						})
+						// Make a copy
+						.clone()
+						// Crop within user drawing boundaries
+						.crop(x, y, width, height)
 						// Convert to buffer
 						.getBufferAsync(Jimp.MIME_PNG)
 						// Broadcast new canvas
 						.then(buffer=>
-							nsp.in(AUTHORIZED).emit("canvas", {blob: buffer})
+							nsp.in(AUTHORIZED).emit("canvas", {buffer, x, y, width, height})
 						)
 						.catch(console.error);
-						this.canvas = image;
 					}
 				})
-				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.name}`, err));
+				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.profile.name}`, err));
 			});
 		});
 	}
