@@ -24,6 +24,9 @@ const MESSAGE_TYPES = Object.freeze({
 	USER_DISCONNECT: "user_disconnect",
 });
 
+const DEFAULT_WIDTH = 600;
+const DEFAULT_HEIGHT = 500;
+
 const AUTHORIZED = "authorized";
 
 const EXPIRE_TIME = 1000*60*5; //5 minutes
@@ -42,8 +45,7 @@ class Room {
 		this.deleteRoomTask = null;
 		this.numUsers = 0;
 		// Initialize with a blank white canvas
-		const width = 400, height = 400;
-		this.canvas = new Jimp(width, height, 0xffffffff, (err, image) => {
+		this.canvas = new Jimp(DEFAULT_WIDTH, DEFAULT_HEIGHT, 0xffffffff, (err, image) => {
 			if(err){
 				console.error(err);
 				return;
@@ -132,7 +134,7 @@ class Room {
 					this.canvas.getBufferAsync(Jimp.MIME_PNG)
 					.then(buffer=>{
 						const {bitmap: {width, height}} = this.canvas;
-						client.emit("canvas", {buffer, x: 0, y: 0, width, height});
+						client.emit("canvas", {buffer, x: 0, y: 0, width, height, setWidth: width, setHeight: height});
 					})
 					.catch(console.error);
 					clearTimeout(disconnectTask); // Cancel disconnect task
@@ -232,7 +234,7 @@ class Room {
 						.catch(console.error);
 					}
 				})
-				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.profile.name}`, err));
+				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.profile.name}: `, err));
 			});
 		});
 	}
