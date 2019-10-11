@@ -258,7 +258,7 @@ class Room {
 				}
 
 				// Enforce size limit
-				if(width > 2000 || height > 2000){
+				if(width > 2000 || height > 2000 || width < 1 || height < 1 ){
 					return;
 				}
 				
