@@ -236,6 +236,56 @@ class Room {
 				})
 				.catch(err=>this.log(`Unable to read canvas data received from ${userSession.profile.name}: `, err));
 			});
+			
+			// User resizes the canvas
+			client.on("resize", data => {
+				const userSession = this.identifyUserSessionBySocket(client);
+				if(!userSession) {
+					this.error("Invalid user:", userSession);
+					return;
+				}
+
+				// Check if data is valid
+				const {width, height} = data;
+				const validityChecks = [
+					isNonNegativeNumberFn(width),
+					isNonNegativeNumberFn(height),
+				];
+				for(let fn of validityChecks){
+					if(!fn()){
+						return this.log(`Invalid resize received from ${userSession.profile.name}`);
+					}
+				}
+
+				// Enforce size limit
+				if(width > 2000 || height > 2000){
+					return;
+				}
+				
+				// Send updated canvas
+				if(this.canvas){
+					const b = this.canvas.bitmap; 
+					// Reducing canvas
+					if(width < b.width)
+						this.canvas.cover(width, b.height);
+					if(height < b.height)
+						this.canvas.cover(b.width, height);
+
+					// Extending canvas
+					if(width > b.width)
+						this.canvas.contain(width, b.height);
+					if(height > b.height)
+						this.canvas.contain(b.width, height);
+
+					this.canvas.getBufferAsync(Jimp.MIME_PNG)
+					.then(buffer=>{
+						const {bitmap: {width, height}} = this.canvas;
+						nsp.in(AUTHORIZED).emit("canvas", {buffer, x: 0, y: 0, width, height, setWidth: width, setHeight: height});
+					})
+					.catch(console.error);
+				}
+					
+			});
 		});
 	}
 }
